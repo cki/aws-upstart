@@ -1,7 +1,11 @@
 # aws-upstart
 
+## description
+
+
 ## Requirements
 
+1.
 create file at .aws/credentials
 with: 
 ```
@@ -10,6 +14,13 @@ aws_access_key_id = <YOUR_ACCESS_KEY_ID>
 aws_secret_access_key = <YOUR_SECRET_ACCESS_KEY>
 ```
 
+2.
+NodeJS
 
-# restriction
+3.
+npm install aws-sdk
+
+
+
+## restriction
 Use at your own risk.
