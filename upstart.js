@@ -174,4 +174,4 @@ Upstart.prototype.getActiveInstances = function(cb) {
 	});
 };
 
-module.exports.Upstart = Upstart;
+module.exports = Upstart;
