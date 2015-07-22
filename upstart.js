@@ -2,21 +2,22 @@ var aws = require('aws-sdk');
 var events = require('events');
 var util = require('util');
 
-/* config data */
 // Use Frankfurt as our region
 aws.config.region = 'eu-central-1';
-// instances we want to be running state
-const desiredRunning = 2;
-
 var ec = new aws.EC2();
 
-function Upstart() {
+
+function Upstart(desiredRunning) {
 	events.EventEmitter.call(this);
-	setInterval(this.update.bind(this),30000);
+	this.main();
+	this.desiredRunning = desiredRunning;
+
+	setInterval(this.main.bind(this),30000);
 }
+util.inherits(Upstart, events.EventEmitter);
 
-
-Upstart.prototype.update = function() {
+Upstart.prototype.main = function() {
+	console.log('===========STATUS UPDATE: ');
 	this.checkStatus(function(instances) {
 		if(!instances) {
 			console.error('can not check status of instances!');
@@ -33,40 +34,42 @@ Upstart.prototype.update = function() {
 
 		//SWITCH: No switch because I hate switch
 		// correct amount of running instances
-		if(runningInstances.length == desiredRunning) {
+		if(runningInstances.length == this.desiredRunning) {
 			// TODO: Write logging?
-				console.log('STATUS: All Good');
+			console.log('STATUS: All Good');
 		}
 
 		// to little instances
-		else if(runningInstances.length < desiredRunning) {
-			if((pendingInstances.length+runningInstances.length) < desiredRunning) {
-				var tooLittle = desiredRunning-runningInstances.length;
-				console.log('STATUS: Too little instances, starting '+tooLittle+' instances');
-				for(var i = 0; i<tooLittle; i++) this.startInstance();
+		else if(runningInstances.length < this.desiredRunning) {
+			if((pendingInstances.length+runningInstances.length) < this.desiredRunning) {
+				var tooLittle = this.desiredRunning-runningInstances.length;
+				for(var i = 0; i<tooLittle; i++) startInstance();
+				console.log('STATUS: Too little instances, started '+tooLittle+' instances');
 			}
 			else console.log('STATUS: Should be good next cycle');
 		}
 
 		// to many instances
 		else {
-			var tooMany = (runningInstances.length+pendingInstances.length) - desiredRunning;
+			var tooMany = (runningInstances.length+pendingInstances.length) - this.desiredRunning;
 
 			for(;tooMany>0;tooMany--) {
 				// start killing the pending machines, start with last sorted
 				if(pendingInstances.length>0) {
-					pendingInstances = pendingInstances.sort(function(a,b) {return a>b;});
-					this.killInstance(pendingInstances.pop());
+					pendingInstances = pendingInstances.sort(function(a,b) {
+						return a.launchTime>b.launchTime;
+					});
+					killInstance(pendingInstances.pop());
 				}
 				// start killing running instances, start with longest running
 				else {
-					runningInstances = runningInstances.sort(function(a,b) {return a<b;});
-					this.killInstance(runningInstances.pop());
+					runningInstances = runningInstances.sort(function(a,b) {
+						return a.launchTime<b.launchTime;
+					});
+					killInstance(runningInstances.pop());
 				}
 			}
 		}
-
-		this.emit('update', runningInstances);
 
 		// output running instanceIds to log
 		console.log('RUNNING INSTANCES: ');
@@ -74,8 +77,11 @@ Upstart.prototype.update = function() {
 			console.log(instance.instanceId);
 		});
 		console.log('-------------------');
-	});
+
+		this.emit('update', runningInstances);
+	}.bind(this));
 };
+
 
 /*
  Should be used by some polling function.
@@ -93,12 +99,14 @@ Upstart.prototype.checkStatus = function(cb) {
 			return;
 		}
 
-		var temp = data.reservations.map(function(reservation) {
-			reservation.instances.map(function(instance) {
+		var temp = data.Reservations.map(function(reservation) {
+			return reservation.Instances.map(function(instance) {
 				return {
-					instanceId: instance.instanceId,
-					status: instance.state.name,
-					ip: instance.PublicIpAddress
+					instanceId: instance.InstanceId,
+					status: instance.State.Name,
+					ip: instance.PublicIpAddress,
+					publicDNS: instance.PublicDnsName,
+					launchTime: instance.LaunchTime
 				};
 			});
 		});
@@ -112,42 +120,32 @@ Upstart.prototype.checkStatus = function(cb) {
  Starts an Amazon Instance, 
  and callsback with ip, instanceid and status
 */
-Upstart.prototype.startInstance = function(cb) {
+function startInstance(cb) {
 	// create 1 t1.micro instance with our image
 	// TODO: exchange with correct image
 	var params = {
-		DryRun: true,
+		DryRun: false,
 		ImageId: 'ami-a8221fb5', 
 		InstanceType: 't2.micro',
 		MinCount: 1, MaxCount: 1
 	};
 
-	ec.runInstance(params, function(err, data) {
+	ec.runInstances(params, function(err, data) {
 		if(err) {
 			console.error('could not create instance', err);
 			if(cb) cb(false);
 			return;
 		}
-		
-		// Should always be correct since we never start 2 instances?
-		var instance = data.Instances[0];
-		var instanceId = instance.InstanceId;
-		var status = instance.state.name;
-		var ip = instance.PublicIpAddress;
-		
-		if(cb) cb({
-			instanceId: instanceId,
-			status: status,
-			ip: ip
-		});
+
+		if(cb) cb(true);
 	});
 };
 
 /*
  Kills given Instance
 */
-Upstart.prototype.killInstance = function(instance, cb) {
-	var params = { InstanceIds: [instance.InstanceId]	};
+function killInstance(instance, cb) {
+	var params = { InstanceIds: [instance.instanceId]	};
 
 	ec.terminateInstances(params, function(err, data) {
 		if(err) {
@@ -155,22 +153,8 @@ Upstart.prototype.killInstance = function(instance, cb) {
 			if(cb) cb(false);
 			return;
 		}
-		console.log('killed instance: '+instance.InstanceId);
+		console.log('killed instance: '+instance.instanceId);
 		if(cb) cb(true);
-	});
-};
-
-Upstart.prototype.getActiveInstances = function(cb) {
-	this.checkStatus(function(instances) {
-		if(!instances) {
-			console.error('can not check status of instances!');
-			return;
-		}
-
-		var runningInstances = instances.filter(function(instance) {
-			return instance.status == 'running';
-		});
-		cb(runningInstances);
 	});
 };
 
