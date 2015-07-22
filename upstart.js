@@ -1,17 +1,23 @@
 var aws = require('aws-sdk');
-
+var events = require('events');
+var util = require('util');
 
 /* config data */
 // Use Frankfurt as our region
 aws.config.region = 'eu-central-1';
-
 // instances we want to be running state
 const desiredRunning = 2;
 
 var ec = new aws.EC2();
 
-setInterval(function() {
-	checkStatus(function(instances) {
+function Upstart() {
+	events.EventEmitter.call(this);
+	setInterval(this.update.bind(this),30000);
+}
+
+
+Upstart.prototype.update = function() {
+	this.checkStatus(function(instances) {
 		if(!instances) {
 			console.error('can not check status of instances!');
 			return;
@@ -37,7 +43,7 @@ setInterval(function() {
 			if((pendingInstances.length+runningInstances.length) < desiredRunning) {
 				var tooLittle = desiredRunning-runningInstances.length;
 				console.log('STATUS: Too little instances, starting '+tooLittle+' instances');
-				for(var i = 0; i<tooLittle; i++) startInstance();
+				for(var i = 0; i<tooLittle; i++) this.startInstance();
 			}
 			else console.log('STATUS: Should be good next cycle');
 		}
@@ -50,25 +56,33 @@ setInterval(function() {
 				// start killing the pending machines, start with last sorted
 				if(pendingInstances.length>0) {
 					pendingInstances = pendingInstances.sort(function(a,b) {return a>b;});
-					killInstance(pendingInstances.pop());
+					this.killInstance(pendingInstances.pop());
 				}
 				// start killing running instances, start with longest running
 				else {
 					runningInstances = runningInstances.sort(function(a,b) {return a<b;});
-					killInstance(runningInstances.pop());
+					this.killInstance(runningInstances.pop());
 				}
 			}
 		}
 
+		this.emit('update', runningInstances);
+
+		// output running instanceIds to log
+		console.log('RUNNING INSTANCES: ');
+		runningInstances.forEach(function(instance) {
+			console.log(instance.instanceId);
+		});
+		console.log('-------------------');
 	});
-}, 30000);
+};
 
 /*
  Should be used by some polling function.
  Checks the status of all instances and 
  callsback with status info
 */
-function checkStatus(cb) {
+Upstart.Prototype.checkStatus = function(cb) {
 	// params empty in order to get status of all instances
 	var params = { /* InstanceIds: [instanceIds] */ };
 
@@ -92,18 +106,19 @@ function checkStatus(cb) {
 		// TODO: Smoothen out unpacking of nested array ..
 		if(cb) cb( [].concat.apply([], temp) );
 	});
-}
+};
 
 /*
  Starts an Amazon Instance, 
  and callsback with ip, instanceid and status
 */
-function startInstance(cb) {
+Upstart.Prototype.startInstance = function(cb) {
 	// create 1 t1.micro instance with our image
 	// TODO: exchange with correct image
 	var params = {
-		ImageId: 'ami-1624987f',
-		InstanceType: 't1.micro',
+		DryRun: true,
+		ImageId: 'ami-a8221fb5', 
+		InstanceType: 't2.micro',
 		MinCount: 1, MaxCount: 1
 	};
 
@@ -126,27 +141,27 @@ function startInstance(cb) {
 			ip: ip
 		});
 	});
-}
+};
 
 /*
  Kills given Instance
 */
-function killInstance(instance, cb) {
+Upstart.prototype.killInstance = function(instance, cb) {
 	var params = { InstanceIds: [instance.InstanceId]	};
 
-	ec.stopInstances(params, function(err, data) {
+	ec.terminateInstances(params, function(err, data) {
 		if(err) {
 			console.error('could not kill instance: '+instance.instanceId, err);
 			if(cb) cb(false);
 			return;
 		}
-		console.log('killed instance');
+		console.log('killed instance: '+instance.InstanceId);
 		if(cb) cb(true);
 	});
-}
+};
 
-function getActiveInstances(cb) {
-	checkStatus(function(instances) {
+Upstart.prototype.getActiveInstances = function(cb) {
+	this.checkStatus(function(instances) {
 		if(!instances) {
 			console.error('can not check status of instances!');
 			return;
@@ -157,6 +172,6 @@ function getActiveInstances(cb) {
 		});
 		cb(runningInstances);
 	});
-}
+};
 
-module.exports.getActiveInstances = getActiveInstances;
+module.exports.Upstart = Upstart;
