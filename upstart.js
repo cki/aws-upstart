@@ -82,7 +82,7 @@ Upstart.prototype.update = function() {
  Checks the status of all instances and 
  callsback with status info
 */
-Upstart.Prototype.checkStatus = function(cb) {
+Upstart.prototype.checkStatus = function(cb) {
 	// params empty in order to get status of all instances
 	var params = { /* InstanceIds: [instanceIds] */ };
 
@@ -112,7 +112,7 @@ Upstart.Prototype.checkStatus = function(cb) {
  Starts an Amazon Instance, 
  and callsback with ip, instanceid and status
 */
-Upstart.Prototype.startInstance = function(cb) {
+Upstart.prototype.startInstance = function(cb) {
 	// create 1 t1.micro instance with our image
 	// TODO: exchange with correct image
 	var params = {
