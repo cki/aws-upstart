@@ -1,7 +1,8 @@
 # aws-upstart
 
 ## Description
-...
+
+Node.js code that keeps N instances in given Region running.
 
 ## Requirements
 

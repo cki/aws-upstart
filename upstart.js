@@ -17,7 +17,7 @@ function Upstart(desiredRunning) {
 util.inherits(Upstart, events.EventEmitter);
 
 Upstart.prototype.main = function() {
-	console.log('===========STATUS UPDATE: ');
+	console.info('===========STATUS UPDATE: ');
 	this.checkStatus(function(instances) {
 		if(!instances) {
 			console.error('can not check status of instances!');
@@ -36,7 +36,7 @@ Upstart.prototype.main = function() {
 		// correct amount of running instances
 		if(runningInstances.length == this.desiredRunning) {
 			// TODO: Write logging?
-			console.log('STATUS: All Good');
+			console.info('STATUS: All Good');
 		}
 
 		// to little instances
@@ -44,9 +44,9 @@ Upstart.prototype.main = function() {
 			if((pendingInstances.length+runningInstances.length) < this.desiredRunning) {
 				var tooLittle = this.desiredRunning-runningInstances.length;
 				for(var i = 0; i<tooLittle; i++) startInstance();
-				console.log('STATUS: Too little instances, started '+tooLittle+' instances');
+				console.info('STATUS: Too little instances, started '+tooLittle+' instances');
 			}
-			else console.log('STATUS: Should be good next cycle');
+			else console.info('STATUS: Should be good next cycle');
 		}
 
 		// to many instances
@@ -72,11 +72,11 @@ Upstart.prototype.main = function() {
 		}
 
 		// output running instanceIds to log
-		console.log('RUNNING INSTANCES: ');
+		console.info('RUNNING INSTANCES: ');
 		runningInstances.forEach(function(instance) {
 			console.log(instance.instanceId);
 		});
-		console.log('-------------------');
+		console.info('-------------------');
 
 		this.emit('update', runningInstances);
 	}.bind(this));
@@ -153,7 +153,7 @@ function killInstance(instance, cb) {
 			if(cb) cb(false);
 			return;
 		}
-		console.log('killed instance: '+instance.instanceId);
+		console.info('killed instance: '+instance.instanceId);
 		if(cb) cb(true);
 	});
 };
