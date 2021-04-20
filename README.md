@@ -1,7 +1,7 @@
 # aws-upstart
 
 ## Description
-...
+This is old code ... maybe you can still use it. I don't.
 
 ## Requirements
 
